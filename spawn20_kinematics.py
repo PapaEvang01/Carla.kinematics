@@ -1,3 +1,14 @@
+    """
+
+Key Features:
+Connects to CARLA and ensures the simulation is in asynchronous mode.
+Spawns an "Ego Vehicle" (Tesla Model 3) at a random spawn point.
+Spawns 20 NPC vehicles (random models) and enables autopilot for all.
+Tracks all vehicles' positions and speeds continuously.
+Dynamically predicts future positions based on real-time speed and direction.
+Cleans up all vehicles when manually stopped (CTRL + C).
+    """
+
 import carla
 import random
 import math
