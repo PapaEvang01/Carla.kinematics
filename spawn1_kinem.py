@@ -1,3 +1,12 @@
+    """
+What This Script Does
+ Connects to CARLA
+Spawns one moving vehicle
+Continuously tracks its position, speed, and direction
+ Predicts future position dynamically
+Runs indefinitely (stops when manually terminated)
+Removes the vehicle on exit
+    """
 import carla
 import math
 import time
