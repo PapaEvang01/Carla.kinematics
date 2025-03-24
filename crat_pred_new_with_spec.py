@@ -131,10 +131,9 @@ def spawn_vehicle(world, spawn_points, blueprint_library, vehicle_type):
         return None 
 
 
-
 def get_best_checkpoint(checkpoint_dir="/home/user/PycharmProjects/crat-pred/lightning_logs/version_51/checkpoints"):
     """
-    Finds the best CRAT-Pred model checkpoint by selecting the one with the lowest validation loss.
+    Finds the best CRAT-Pred model checkpoint by selecting the one with the lowest fde_val.
 
     Args:
         checkpoint_dir (str): Path to the directory containing model checkpoint files.
@@ -144,16 +143,14 @@ def get_best_checkpoint(checkpoint_dir="/home/user/PycharmProjects/crat-pred/lig
     """
     checkpoints = [f for f in os.listdir(checkpoint_dir) if f.endswith(".ckpt")]
 
-    def extract_loss(filename):
-        """Extracts the validation loss from the checkpoint filename."""
+    def extract_fde(filename):
         try:
-            return float(filename.split("loss_val=")[-1].replace(".ckpt", ""))
+            return float(filename.split("fde_val=")[-1].split("-")[0])
         except:
-            return float("inf")  # Return a high value if extraction fails
+            return float("inf")
 
-    best_checkpoint = min(checkpoints, key=extract_loss)  # Select checkpoint with lowest validation loss
+    best_checkpoint = min(checkpoints, key=extract_fde)
     return os.path.join(checkpoint_dir, best_checkpoint)
-
 
 
 def load_cratpred_model():
@@ -520,11 +517,6 @@ def main():
         - Runs CRAT-Pred to predict future trajectories.
         - Updates the spectator camera to follow the Ego Vehicle.
         - Cleans up vehicles upon simulation termination.
-
-    Runs indefinitely until manually stopped (KeyboardInterrupt).
-
-    Exits:
-        If CARLA fails to connect or no vehicles are successfully spawned.
     """
     print("Connecting to CARLA...")
 
@@ -534,7 +526,7 @@ def main():
     except Exception as e:
         print(f"Error connecting to CARLA: {e}")
         return
-    
+
     ensure_async_mode(world)
 
     # Retrieve available spawn points and vehicle blueprints
@@ -548,25 +540,22 @@ def main():
     print("Loading CRAT-Pred model...")
     model = load_cratpred_model()
 
-    # Spawn Ego Vehicle (Main controlled vehicle)
+    # Spawn Ego Vehicle
     ego_vehicle = spawn_ego_vehicle(world, spawn_points, blueprint_library)
-
-    # Store ego vehicle's origin position for trajectory tracking
     if ego_vehicle:
         transform = ego_vehicle.get_transform()
         vehicle_origins[ego_vehicle.id] = [transform.location.x, transform.location.y]
 
-    # Spawn NPC vehicles (Non-player characters)
-    num_npcs = 1  # Increase to 10 for better visualization
-    vehicles = [ego_vehicle]  # Start the list with the Ego Vehicle
+    # Spawn NPC vehicles
+    num_npcs = 1
+    vehicles = [ego_vehicle]
     vehicle_blueprints = [bp.id for bp in blueprint_library.filter("vehicle.*") if bp.has_attribute('number_of_wheels')]
 
     for i in range(min(num_npcs, len(spawn_points))):
-        vehicle_type = random.choice(vehicle_blueprints)  # Select a random vehicle type
+        vehicle_type = random.choice(vehicle_blueprints)
         vehicle = spawn_vehicle(world, spawn_points, blueprint_library, vehicle_type)
         if vehicle:
             vehicles.append(vehicle)
-            # Store NPC vehicle's origin position
             transform = vehicle.get_transform()
             vehicle_origins[vehicle.id] = [transform.location.x, transform.location.y]
 
@@ -575,9 +564,8 @@ def main():
         return
 
     print("\nAll vehicles spawned. Waiting 3 seconds for movement before predictions start...\n")
-    time.sleep(3)  # Allow vehicles to move before starting tracking
+    time.sleep(3)
 
-    # Ensure all vehicles have a history tracking entry
     for vehicle in vehicles:
         if vehicle.id not in vehicle_histories:
             vehicle_histories[vehicle.id] = []
@@ -585,31 +573,32 @@ def main():
     try:
         timestamp = 3
         while True:
-            store_vehicle_positions(timestamp, vehicles)  # Log real-time positions
+            store_vehicle_positions(timestamp, vehicles)
             print(f"\nRunning vehicle tracking at {timestamp}s...")
 
             if timestamp == 3:
                 for vehicle in vehicles:
                     transform = vehicle.get_transform()
                     vehicle_positions_log.setdefault(3, {})[vehicle.id] = [transform.location.x, transform.location.y]
-                    print(f"[INFO] Vehicle {vehicle.id} ({vehicle.type_id}) at 3s -> Current Position: (X: {transform.location.x:.3f}, Y: {transform.location.y:.3f})")
+                    print(f"[INFO] Vehicle {vehicle.id} ({vehicle.type_id}) at 3s -> Current Position: "
+                          f"(X: {transform.location.x:.3f}, Y: {transform.location.y:.3f})")
 
-            # Skip calling predict_future_cratpred at t=3s
             if timestamp > 3:
                 for vehicle in vehicles:
                     if vehicle.id in vehicle_histories:
-                        predict_future_cratpred(vehicle, model, timestamp)  # Run trajectory prediction
+                        predict_future_cratpred(vehicle, model, timestamp)
                     else:
                         print(f"Warning: Vehicle {vehicle.id} not found in history. Skipping.")
 
             draw_predicted_trajectory(world, vehicles + [ego_vehicle], prediction_time=5, step_size=0.5)
 
-            # Update spectator camera to follow Ego Vehicle
             if ego_vehicle:
                 update_spectator_view(world, ego_vehicle)
 
             timestamp += 1
-            time.sleep(1.0)  # Wait 1 second before next tracking cycle
+            world.wait_for_tick()
+            time.sleep(0.5)  # Slows down simulation updates
+
 
     except KeyboardInterrupt:
         print("\nSimulation stopped.")
@@ -625,6 +614,13 @@ def main():
 # Run the main function when the script is executed
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
 
 
 
