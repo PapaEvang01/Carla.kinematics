@@ -216,40 +216,55 @@ def update_spectator_view(world, vehicle):
 
 def calculate_rotation(vehicle_id):
     """
-    Computes a more stable rotation matrix using a weighted moving average of past movement vectors.
+    Computes the rotation matrix that aligns the last movement vector
+    of the vehicle's trajectory with the X-axis (standard CRAT-Pred normalization).
 
     Args:
         vehicle_id (int): The unique ID of the vehicle.
 
     Returns:
-        torch.Tensor: A (1, 2, 2) rotation matrix for aligning predictions.
-                      Returns an identity matrix if insufficient data.
+        torch.Tensor: A (1, 2, 2) rotation matrix.
     """
-    # Check if we have enough data points
-    if vehicle_id not in vehicle_centers_matrix or vehicle_centers_matrix[vehicle_id].shape[1] < 5:
-        return torch.tensor([[1.0, 0.0], [0.0, 1.0]], dtype=torch.float32).unsqueeze(0)
 
-    # Convert stored positions to numpy
-    centers_matrix_np = vehicle_centers_matrix[vehicle_id].squeeze(0).numpy()
+    # If we don't have enough position history for this vehicle (less than 2), return identity
+    if vehicle_id not in vehicle_centers_matrix or vehicle_centers_matrix[vehicle_id].shape[1] < 2:
+        print(f"[DEBUG] Vehicle {vehicle_id}: Not enough history for rotation. Returning identity.")
+        return torch.eye(2, dtype=torch.float32).unsqueeze(0)
 
-    # **weighted moving average** over last 5 positions
-    weights = np.array([1, 2, 3, 4, 5])  
-    motion_vectors = np.diff(centers_matrix_np[-6:], axis=0)  # Last 5 motion vectors
-    weighted_motion = np.average(motion_vectors, axis=0, weights=weights[:len(motion_vectors)])
+    # Extract the last two recorded positions of the vehicle
+    positions = vehicle_centers_matrix[vehicle_id].squeeze(0).numpy()
+    prev, curr = positions[-2], positions[-1]
 
-    #  **Ensure non-zero motion vector**
-    if np.linalg.norm(weighted_motion) > 0:  
-        angle = np.arctan2(weighted_motion[1], weighted_motion[0])
-    else:
-        angle = 0  # Default to zero if no motion detected
+    # Compute the movement vector (difference between last two positions)
+    dx, dy = curr[0] - prev[0], curr[1] - prev[1]
+    norm = np.linalg.norm([dx, dy])  # Get the magnitude of the movement vector
 
-    # Convert motion angle into a rotation matrix
-    rotation_matrix = torch.tensor([
-        [np.cos(angle), -np.sin(angle)],
-        [np.sin(angle), np.cos(angle)]
-    ], dtype=torch.float32).unsqueeze(0)
+    # If the vehicle hasn’t moved (zero vector), return identity matrix
+    if norm == 0:
+        print(f"[DEBUG] Vehicle {vehicle_id}: No movement detected. Returning identity rotation.")
+        return torch.eye(2, dtype=torch.float32).unsqueeze(0)
 
-    return rotation_matrix
+    # Compute the angle between the movement vector and the positive X-axis (in radians)
+    angle = np.arctan2(dy, dx)
+    angle_degrees = np.degrees(angle)  # For debugging
+
+    # Construct a 2D rotation matrix to rotate the movement vector to align with the X-axis
+    # We rotate by -angle to align the motion vector with the +X axis
+    rotation = torch.tensor([
+        [np.cos(-angle), -np.sin(-angle)],
+        [np.sin(-angle),  np.cos(-angle)]
+    ], dtype=torch.float32).unsqueeze(0)  # Shape: (1, 2, 2)
+
+    # DEBUG PRINTS 
+    #print(f"[DEBUG] Vehicle {vehicle_id} rotation calculation:")
+    #print(f"        Last movement vector: dx = {dx:.6f}, dy = {dy:.6f}")
+    #print(f"        Angle to X-axis: {angle_degrees:.4f}°")
+    #print(f"        Rotation Matrix:\n{rotation.squeeze(0).numpy()}")
+
+    # Return the rotation matrix for normalization
+    return rotation
+
+
 
 
 
@@ -309,7 +324,7 @@ def draw_predicted_trajectory(world, vehicles, prediction_time=5, step_size=0.5)
 
 def predict_future_cratpred(vehicle, model, timestamp):
     """
-    Predicts future trajectories for a vehicle using the CRAT-Pred model.
+    Predicts future trajectories for a vehicle using the CRAT-Pred model with rotation normalization.
 
     Args:
         vehicle (carla.Actor): The CARLA vehicle instance being tracked.
@@ -319,98 +334,86 @@ def predict_future_cratpred(vehicle, model, timestamp):
     Returns:
         list: A list of predicted (x, y) positions for the next timesteps.
     """
-
     print(f"\n[INFO] Processing Vehicle {vehicle.type_id} (ID: {vehicle.id}) at {timestamp}s")
 
-    # Retrieve vehicle's current position
     transform = vehicle.get_transform()
     current_x, current_y = round(transform.location.x, 3), round(transform.location.y, 3)
 
-    # Store the first recorded position of the vehicle
     if vehicle.id not in vehicle_origins:
         vehicle_origins[vehicle.id] = [current_x, current_y]
         print(f"[DEBUG] Stored First Recorded Position for Vehicle {vehicle.id}: (X: {current_x}, Y: {current_y})")
 
-    # Store position history
     vehicle_histories.setdefault(vehicle.id, []).append([current_x, current_y])
-
-    # Maintain a max history of 21 positions (20 displacements)
     if len(vehicle_histories[vehicle.id]) > 21:
         vehicle_histories[vehicle.id].pop(0)
 
-    # Retrieve past positions for trajectory tracking
     numeric_keys = sorted([t for t in vehicle_positions_log.keys() if isinstance(t, int)])
     centers_list = [vehicle_positions_log[t][vehicle.id] for t in numeric_keys if vehicle.id in vehicle_positions_log[t]]
 
-    # Ensure at least one valid position exists
     if not centers_list:
         centers_list.append([current_x, current_y])
 
-    # Convert to tensor format for model processing
     centers_matrix = torch.tensor(centers_list, dtype=torch.float32).unsqueeze(0)
-    vehicle_centers_matrix[vehicle.id] = centers_matrix  
+    vehicle_centers_matrix[vehicle.id] = centers_matrix
 
-    # Compute displacements (change in position over time)
     centers_matrix_np = centers_matrix.squeeze(0).numpy()
 
-    if timestamp == 3:  
-        # No prediction at t=3s; we just record the position
-        return  
+    # DEBUG: Print full position history
+    #print(f"[DEBUG] Position History (centers_list) for Vehicle {vehicle.id}: {centers_list}")
 
+    if timestamp == 3:
+        print("[DEBUG] Skipping prediction at t=3s to establish initial position.")
+        return
     elif timestamp == 4:
-        # Compute first displacement as (x4s - x3s, y4s - y3s)
-        first_displacement = np.array([[centers_matrix_np[-1, 0] - centers_matrix_np[-2, 0], 
+        first_displacement = np.array([[centers_matrix_np[-1, 0] - centers_matrix_np[-2, 0],
                                         centers_matrix_np[-1, 1] - centers_matrix_np[-2, 1]]])
-        #print(f"[DEBUG] First displacement (x4s-x3s, y4s-y3s) for Vehicle {vehicle.id} at {timestamp}s: {first_displacement}")
-        displacements = first_displacement  # Single row matrix for t=4s
-
+        displacements = first_displacement
     elif centers_matrix_np.shape[0] > 1:
-        # Compute normal displacements (x_t - x_t-1, y_t - y_t-1) for t>=5s
         displacements = np.diff(centers_matrix_np, axis=0)
-
     else:
-        # If only one recorded position, default to (0,0)
         displacements = np.array([[0.0, 0.0]])
         print(f"[DEBUG] Not enough history for displacement at {timestamp}s. Using (0,0) for Vehicle {vehicle.id}.")
 
-    # Convert displacements to PyTorch tensor
-    displacements_tensor = torch.tensor(displacements, dtype=torch.float32).unsqueeze(0)
+    # DEBUG: Print displacements
+    #print(f"[DEBUG] Displacements for Vehicle {vehicle.id}:\n{displacements}")
 
-    # Add a third feature with a value of 1 (flag for valid observations)
+    displacements_tensor = torch.tensor(displacements, dtype=torch.float32).unsqueeze(0)
     ones_feature = torch.ones((displacements_tensor.shape[0], displacements_tensor.shape[1], 1), dtype=torch.float32)
     displacements_tensor = torch.cat((displacements_tensor, ones_feature), dim=-1)
 
-    # Debugging: Print displacements every second
-    #print(f"[DEBUG] Displacement Matrix for Vehicle {vehicle.id} at {timestamp}s:\n{displacements_tensor.numpy()}")
-
-    # Determine origin (first recorded position at t=3s)
     if 3 in vehicle_positions_log and vehicle.id in vehicle_positions_log[3]:
         origin_x, origin_y = vehicle_positions_log[3][vehicle.id]
-    #else:
     else:
-         print(f"[ERROR] Missing t=3s position for Vehicle {vehicle.id}. Exiting prediction.")
-         return None  # Exit function if t=3s data is missing
+        print(f"[ERROR] Missing t=3s position for Vehicle {vehicle.id}. Exiting prediction.")
+        return None
 
     origin = torch.tensor([origin_x, origin_y], dtype=torch.float32).view(1, 2)
-
-    # Debugging: Print the origin position
-    #print(f"[DEBUG] Origin Position for Vehicle {vehicle.id} at {timestamp}s: {origin.numpy()}")
-
-    # Extract last observed position for trajectory input
     centers = centers_matrix[:, -1, :].view(1, 2)
 
-    # Compute rotation matrix
-    rotation_matrix = calculate_rotation(vehicle.id)
+    # DEBUG: Print origin and centers
+    #print(f"[DEBUG] ORIGIN for Vehicle {vehicle.id}: (X: {origin_x:.3f}, Y: {origin_y:.3f})")
+    #print(f"[DEBUG] CENTER (Last Position) for Vehicle {vehicle.id}: {centers.numpy().flatten().tolist()}")
 
-    # Prepare input batch for CRAT-Pred model
+    rotation_matrix = calculate_rotation(vehicle.id)
+    if isinstance(rotation_matrix, np.ndarray):
+        rotation_matrix = torch.tensor(rotation_matrix, dtype=torch.float32)
+    elif rotation_matrix.dim() == 3:
+        rotation_matrix = rotation_matrix.squeeze(0)
+
+    #print(f"[DEBUG] Rotation Matrix Shape: {rotation_matrix.shape}")
+
+    displ_rotated = torch.matmul(displacements_tensor[:, :, :2], rotation_matrix.T)
+    centers_rotated = torch.matmul(centers, rotation_matrix.T)
+    origin_rotated = torch.matmul(origin, rotation_matrix.T)
+    displ_rotated = torch.cat((displ_rotated, ones_feature), dim=-1)
+
     batch = {
-        "displ": (displacements_tensor,),
-        "centers": (centers,),
-        "rotation": rotation_matrix,
-        "origin": origin
+        "displ": (displ_rotated,),
+        "centers": (centers_rotated,),
+        "rotation": rotation_matrix.unsqueeze(0),
+        "origin": origin_rotated
     }
 
-    # Run prediction
     with torch.no_grad():
         predictions = model(batch)
 
@@ -418,51 +421,34 @@ def predict_future_cratpred(vehicle, model, timestamp):
         print(f"[ERROR] CRAT-Pred returned None for Vehicle {vehicle.id}. Skipping prediction.")
         return None
 
-    # Convert predictions to NumPy format
     predictions = predictions.squeeze(0).cpu().numpy()
 
-    # Compute Final Displacement Error (FDE) across all predicted modes
-    final_positions = predictions[0, :, -1]  
-    real_last_x, real_last_y = centers.numpy().flatten()  
+    final_positions = predictions[0, :, -1]
+    real_last_x, real_last_y = centers.numpy().flatten()
     fde_scores = np.linalg.norm(final_positions - [real_last_x, real_last_y], axis=1)
 
-    # Debugging: Print extracted final positions
-    #print(f"[DEBUG] Final Predicted Positions (Last Timesteps): \n{final_positions}")
-
-    # Debugging: Print real last observed position
-    #print(f"[DEBUG] Real Last Observed Position: (X: {real_last_x}, Y: {real_last_y})")
-
-    # Debugging: Print computed FDE scores
-    #print(f"[DEBUG] Computed FDE Scores for All Modes: {fde_scores}")
-
-    # Select the best mode based on FDE
-    best_mode_index = np.argmin(fde_scores)  
-
-    # Extract the best predicted mode's displacements
+    best_mode_index = np.argmin(fde_scores)
     best_mode_displacements = predictions[0, best_mode_index]
 
-    # Debugging: Print the best mode index
-    #print(f"[DEBUG] Best Mode Index (Lowest FDE): {best_mode_index}")
+    # Inverse rotation to bring predictions back to original orientation
+    inverse_rot = rotation_matrix.T  # since rotation_matrix is orthogonal
+    best_mode_displacements_tensor = torch.tensor(best_mode_displacements, dtype=torch.float32)
+    best_mode_displacements_rot = torch.matmul(best_mode_displacements_tensor, inverse_rot.T).numpy()
 
-    # Convert displacements into absolute future positions
     predicted_positions = []
     prev_x, prev_y = current_x, current_y
-
-    for dx, dy in best_mode_displacements:
+    for dx, dy in best_mode_displacements_rot:
         future_x = round(prev_x + dx, 3)
         future_y = round(prev_y + dy, 3)
         predicted_positions.append([future_x, future_y])
         prev_x, prev_y = future_x, future_y
 
-    # Store predicted positions
     vehicle_positions_log[f"predicted_{vehicle.id}"] = predicted_positions
 
-    # Debugging: Predicted Positions
     print(f"[INFO] Vehicle {vehicle.id} ({vehicle.type_id}) at {timestamp}s -> Current Position: (X: {current_x:.3f}, Y: {current_y:.3f})")
     print(f"[INFO] Predicted positions for next timesteps: {predicted_positions[:5]}...")
 
     return predicted_positions
-
 
 
 def store_vehicle_positions(timestamp, vehicles):
@@ -597,7 +583,7 @@ def main():
 
             timestamp += 1
             world.wait_for_tick()
-            time.sleep(0.5)  # Slows down simulation updates
+           # time.sleep(0.5)  # Slows down simulation updates
 
 
     except KeyboardInterrupt:
