@@ -7,7 +7,6 @@ import sys
 import os
 import math
 
-
 # Ensure Python can find the "model/" directory
 sys.path.append("/home/user/PycharmProjects/crat-pred/model")
 
@@ -16,7 +15,7 @@ from crat_pred import CratPred
 
 vehicle_histories = {}  # Stores historical (x, y) positions for each vehicle
 vehicle_origins = {}  # Stores the first recorded position of each vehicle
-vehicle_positions_log = {}  # Stores all recorded positions per second (timestamp → positions)
+vehicle_positions_log = {}  # Stores all recorded positions per second (timestamp → positions)1
 vehicle_centers_matrix = {}  # Stores the processed center positions of each vehicle for trajectory prediction
 
 def connect_to_carla():
@@ -88,8 +87,6 @@ def spawn_ego_vehicle(world, spawn_points, blueprint_library):
     else:
         print("Failed to spawn Ego Vehicle.") 
         exit()  # Exit
-
-
 
 def spawn_vehicle(world, spawn_points, blueprint_library, vehicle_type):
     """
@@ -213,7 +210,6 @@ def update_spectator_view(world, vehicle):
     spectator.set_transform(spectator_transform)
 
 
-
 def calculate_rotation(vehicle_id):
     """
     Computes the rotation matrix that aligns the last movement vector
@@ -318,7 +314,6 @@ def draw_predicted_trajectory(world, vehicles, prediction_time=5, step_size=0.5)
         #print(f"[INFO] Visualized {len(waypoints_to_draw)} waypoints for Vehicle {vehicle_id}")
 
 
-
 def predict_future_cratpred(vehicle, model, timestamp):
     """
     Predicts future trajectories for a vehicle using the CRAT-Pred model with rotation normalization.
@@ -334,7 +329,8 @@ def predict_future_cratpred(vehicle, model, timestamp):
     print(f"\n[INFO] Processing Vehicle {vehicle.type_id} (ID: {vehicle.id}) at {timestamp}s")
 
     transform = vehicle.get_transform()
-    current_x, current_y = round(transform.location.x, 3), round(transform.location.y, 3)
+    #current_x, current_y = round(transform.location.x, 3), round(transform.location.y, 3)
+    current_x, current_y = transform.location.x, transform.location.y 
 
     if vehicle.id not in vehicle_origins:
         vehicle_origins[vehicle.id] = [current_x, current_y]
@@ -408,26 +404,39 @@ def predict_future_cratpred(vehicle, model, timestamp):
         return None
 
     predictions = predictions.squeeze(0).cpu().numpy()  # (num_modes, num_steps, 2)
+    if predictions.ndim == 4 and predictions.shape[0] == 1:
+    	predictions = predictions[0]  # squeeze batch
+    num_modes = predictions.shape[0]
 
-    # Get final predicted position of each mode (for FDE)
-    final_positions = predictions[:, -1, :]  # (num_modes, 2)
+    if predictions.ndim != 3 or num_modes == 0:
+        print(f"[ERROR] Invalid prediction shape: {predictions.shape}. Skipping prediction.")
+        return None
+
     real_last_x, real_last_y = centers.numpy().flatten()
+    final_positions = predictions[:, -1, :]  # (num_modes, 2)
     fde_scores = np.linalg.norm(final_positions - [real_last_x, real_last_y], axis=1)
+   # print(f"[DEBUG] FDE Scores: {fde_scores}")
 
-    # Select best mode with lowest final displacement error
-    best_mode_index = np.argmin(fde_scores)
-    best_mode_displacements = predictions[0,best_mode_index]  # (num_steps, 2)
+    best_mode_index = int(np.argmin(fde_scores))
+    best_fde_score = fde_scores[best_mode_index] if fde_scores.ndim == 1 else fde_scores.flatten()[best_mode_index]
+    #print(f"[DEBUG] Selected best mode index: {best_mode_index} with FDE = {best_fde_score:.4f}")
+
+    best_mode_displacements = predictions[best_mode_index]  # (num_steps, 2)
+    #print(f"[DEBUG] Best mode displacements (raw):\n{best_mode_displacements}")
 
     # Inverse rotate predictions
     inverse_rot = rotation_matrix.T
     best_mode_displacements_tensor = torch.tensor(best_mode_displacements, dtype=torch.float32)
     best_mode_displacements_rot = torch.matmul(best_mode_displacements_tensor, inverse_rot.T).numpy()
+    #print(f"[DEBUG] Best mode displacements (after inverse rotation):\n{best_mode_displacements_rot}")
 
     predicted_positions = []
     prev_x, prev_y = centers.numpy().flatten()
     for dx, dy in best_mode_displacements_rot:
-        future_x = round(prev_x + dx, 3)
-        future_y = round(prev_y + dy, 3)
+        #future_x = round(prev_x + dx, 3)
+        #future_y = round(prev_y + dy, 3)
+        future_x = prev_x + dx
+        future_y = prev_y + dy
         predicted_positions.append([future_x, future_y])
         prev_x, prev_y = future_x, future_y
 
@@ -462,7 +471,6 @@ def store_vehicle_positions(timestamp, vehicles):
             vehicle_positions_log[timestamp][vehicle.id] = [transform.location.x, transform.location.y]
 
         # print(f"Stored positions at timestamp {timestamp}s: {vehicle_positions_log[timestamp]}")  # Debug print
-
 
 
 def cleanup_vehicles(vehicles_list, ego_vehicle):
@@ -571,7 +579,7 @@ def main():
 
             timestamp += 1
             world.wait_for_tick()
-            #time.sleep(0.5)  # Slows down simulation updates
+            #time.sleep(1)  # Slows down simulation updates
 
 
     except KeyboardInterrupt:
