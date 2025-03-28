@@ -328,6 +328,7 @@ def predict_future_cratpred(vehicle, model, timestamp):
     """
     print(f"\n[INFO] Processing Vehicle {vehicle.type_id} (ID: {vehicle.id}) at {timestamp}s")
 
+    # ---  Get current position of the vehicle ---
     transform = vehicle.get_transform()
     #current_x, current_y = round(transform.location.x, 3), round(transform.location.y, 3)
     current_x, current_y = transform.location.x, transform.location.y 
@@ -351,6 +352,7 @@ def predict_future_cratpred(vehicle, model, timestamp):
 
     centers_matrix_np = centers_matrix.squeeze(0).numpy()
 
+    # ---  Calculate displacements from positions (first difference) ---
     if timestamp == 3:
         print("[DEBUG] Skipping prediction at t=3s to establish initial position.")
         return
@@ -378,17 +380,20 @@ def predict_future_cratpred(vehicle, model, timestamp):
     origin = torch.tensor([origin_x, origin_y], dtype=torch.float32).view(1, 2)
     centers = centers_matrix[:, -1, :].view(1, 2)
 
+    # ---  Compute rotation matrix to align trajectory with the X-axis ---
     rotation_matrix = calculate_rotation(vehicle.id)
     if isinstance(rotation_matrix, np.ndarray):
         rotation_matrix = torch.tensor(rotation_matrix, dtype=torch.float32)
     elif rotation_matrix.dim() == 3:
         rotation_matrix = rotation_matrix.squeeze(0)
 
+     # --- Apply rotation to all inputs (displacements, center, origin) ---
     displ_rotated = torch.matmul(displacements_tensor[:, :, :2], rotation_matrix.T)
     centers_rotated = torch.matmul(centers, rotation_matrix.T)
     origin_rotated = torch.matmul(origin, rotation_matrix.T)
     displ_rotated = torch.cat((displ_rotated, ones_feature), dim=-1)
 
+    # --- Build CRAT-Pred batch input ---
     batch = {
         "displ": (displ_rotated,),
         "centers": (centers_rotated,),
@@ -396,6 +401,7 @@ def predict_future_cratpred(vehicle, model, timestamp):
         "origin": origin_rotated
     }
 
+    # --- Run the prediction model ---
     with torch.no_grad():
         predictions = model(batch)
 
@@ -412,6 +418,7 @@ def predict_future_cratpred(vehicle, model, timestamp):
         print(f"[ERROR] Invalid prediction shape: {predictions.shape}. Skipping prediction.")
         return None
 
+    # ---  Evaluate FDE (Final Displacement Error) and pick the best mode ---
     real_last_x, real_last_y = centers.numpy().flatten()
     final_positions = predictions[:, -1, :]  # (num_modes, 2)
     fde_scores = np.linalg.norm(final_positions - [real_last_x, real_last_y], axis=1)
@@ -430,6 +437,7 @@ def predict_future_cratpred(vehicle, model, timestamp):
     best_mode_displacements_rot = torch.matmul(best_mode_displacements_tensor, inverse_rot.T).numpy()
     #print(f"[DEBUG] Best mode displacements (after inverse rotation):\n{best_mode_displacements_rot}")
 
+     # ---  Reconstruct absolute (x, y) positions from displacements ---
     predicted_positions = []
     prev_x, prev_y = centers.numpy().flatten()
     for dx, dy in best_mode_displacements_rot:
