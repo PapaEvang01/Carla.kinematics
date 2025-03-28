@@ -1,3 +1,25 @@
+"""
+Trajectory Prediction in CARLA using CRAT-Pred
+------------------------------------------------
+This script connects to the CARLA simulator and performs real-time trajectory prediction
+for an ego vehicle and optionally spawned NPC vehicles using the CRAT-Pred deep learning model.
+
+Key Features:
+- Connects to CARLA in asynchronous mode.
+- Spawns a Tesla Model 3 as the ego vehicle, along with random NPC vehicles.
+- Logs vehicle positions over time starting from 3 seconds.
+- Calculates displacements and normalizes trajectories using rotation matrices
+  based on the vehicle's last movement direction.
+- Feeds normalized data into CRAT-Pred to predict future positions.
+- Selects the most likely prediction mode using Final Displacement Error (FDE).
+- Inversely rotates predictions back into world space and visualizes them in CARLA.
+- Keeps the spectator camera locked top-down on the ego vehicle for clarity.
+- Automatically cleans up vehicles on simulation stop.
+
+This setup enables end-to-end evaluation of multi-modal trajectory predictions within
+a realistic driving simulation environment.
+"""
+
 import time
 import random
 import numpy as np
