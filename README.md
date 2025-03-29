@@ -34,8 +34,10 @@ vx,vyv_x, v_y — Velocity components
 tt — Prediction time window (e.g. 10 seconds)
 
 Velocity is derived from vehicle speed and yaw:
+
 vx=v⋅cos⁡(yaw),
 vy=v⋅sin⁡(yaw)
+
 This model acts as a baseline before applying learning-based or multi-agent trajectory predictors.
 
 🎯 Advanced Kinematics Visualizations in CARLA
@@ -46,8 +48,11 @@ The project includes two upgraded scripts that visualize vehicle state and predi
 A visual extension of the base script with:
 
 Real-time drawing of predicted trajectories
+
 3D bounding boxes for all vehicles
+
 Terminal logs for state + prediction
+
 No camera movement — great for observing the whole map
 
 
@@ -56,7 +61,9 @@ No camera movement — great for observing the whole map
 Builds on the above, adding:
 
 A spectator camera that follows the ego vehicle from above
+
 Ideal for visualizing local interactions around the ego vehicle
+
 Maintains real-time drawings and logs
 
 
