@@ -6,8 +6,10 @@ Predicting Future Positions of Vehicles in CARLA
 
 CARLA is an open-source simulator for autonomous driving research, offering realistic environments, sensors, and traffic scenarios.
  It enables safe testing of self-driving models in diverse urban settings with full control over vehicles, pedestrians, and weather.
+ 
 Trajectory prediction refers to forecasting the future positions of moving agents (like vehicles) over time.
  In CARLA, it is essential for simulating and evaluating autonomous vehicle decision-making.
+ 
 This project demonstrates simple kinematic-based trajectory prediction as a real-time baseline.
 
 🚘 spawn20_kinematics.py — Kinematic Vehicle Prediction in CARLA
