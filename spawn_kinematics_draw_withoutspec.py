@@ -8,6 +8,8 @@ Key Features:
 - Predicts and visualizes future trajectories based on current speed and yaw.
 - Renders 3D bounding boxes around all vehicles in the simulation.
 - Cleans up all actors when the simulation is manually stopped (Ctrl + C).
+
+This setup shows the whole map.
 """
 
 import carla
