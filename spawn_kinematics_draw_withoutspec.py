@@ -1,3 +1,15 @@
+"""
+Real-Time CARLA Vehicle Tracking & Visualization
+
+Key Features:
+- Connects to the CARLA simulator and ensures asynchronous mode is enabled.
+- Spawns an ego vehicle (Tesla Model 3) and 20 NPC vehicles at random spawn points.
+- Enables autopilot for all vehicles and continuously tracks their state.
+- Predicts and visualizes future trajectories based on current speed and yaw.
+- Renders 3D bounding boxes around all vehicles in the simulation.
+- Cleans up all actors when the simulation is manually stopped (Ctrl + C).
+"""
+
 import carla
 import random
 import math
