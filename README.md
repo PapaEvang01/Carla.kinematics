@@ -2,6 +2,7 @@
 
 Predicting Future Positions of Vehicles in CARLA
 
+
 📘 What is CARLA and Trajectory Prediction?
 
 CARLA is an open-source simulator for autonomous driving research, offering realistic environments, sensors, and traffic scenarios.
