@@ -22,18 +22,18 @@ Using basic kinematic equations, it predicts future positions assuming constant 
 
 This project uses constant-velocity motion modeling:
 
-xf=x0+vx⋅tx_f, 
-yf=y0+vy⋅ty_f 
+xf=x0+vx⋅t, 
+yf=y0+vy⋅t 
 
 Where:
 
-x0,y0x_0, y_0 — Current position
+x0,y0 — Current position
 
-xf,yfx_f, y_f — Predicted position after time tt
+xf,yf — Predicted position after time tt
 
-vx,vyv_x, v_y — Velocity components
+vx,vy — Velocity components
 
-tt — Prediction time window (e.g. 10 seconds)
+t — Prediction time window (e.g. 10 seconds)
 
 Velocity is derived from vehicle speed and yaw:
 
