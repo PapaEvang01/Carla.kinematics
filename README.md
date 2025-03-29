@@ -11,6 +11,8 @@ CARLA is an open-source simulator for autonomous driving research, offering real
 Trajectory prediction refers to forecasting the future positions of moving agents (like vehicles) over time.
  In CARLA, it is essential for simulating and evaluating autonomous vehicle decision-making.
 
+ --> Basic Kimetacis Equations
+
 🚘 spawn20_kinematics.py — Kinematic Vehicle Prediction in CARLA
 
 This script implements a real-time vehicle tracking and prediction pipeline.
@@ -53,6 +55,8 @@ A visual extension of the base script with real-time drawing of predicted trajec
 📁 spawn_kinematics_draw_withspec.py
 
 Builds on the above, adding a spectator camera that follows the ego vehicle from above
+
+-->Deep Learning
 
 🧠 What is CRAT-Pred?
 
