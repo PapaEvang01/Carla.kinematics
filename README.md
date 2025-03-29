@@ -70,6 +70,19 @@ Ideal for visualizing local interactions around the ego vehicle
 Maintains real-time drawings and logs
 
 
+🧠 What is CRAT-Pred?
+
+CRAT-Pred (Conditional Relational Attention Trajectory Prediction) is a deep neural network model that predicts future trajectories of multiple agents in traffic scenes.
+It uses relational attention mechanisms to model interactions between nearby vehicles, making it ideal for dense, multi-agent environments like those in CARLA.
+
+Unlike kinematic models, CRAT-Pred:
+
+Learns social and spatial interactions from data
+
+Produces multiple plausible futures (multi-modal predictions)
+
+Selects the most likely trajectory based on learned patterns
+
 
 
 
