@@ -40,7 +40,7 @@ Velocity is derived from vehicle speed and yaw:
 vx=v⋅cos⁡(yaw),
 vy=v⋅sin⁡(yaw)
 
-This model acts as a baseline before applying learning-based or multi-agent trajectory predictors.
+*This model acts as a baseline before applying learning-based or multi-agent trajectory predictors.
 
 🎯 Advanced Kinematics Visualizations in CARLA
 
