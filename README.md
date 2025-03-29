@@ -43,6 +43,7 @@ vy=v⋅sin⁡(yaw)
 This model acts as a baseline before applying learning-based or multi-agent trajectory predictors.
 
 🎯 Advanced Kinematics Visualizations in CARLA
+
 The project includes two upgraded scripts that visualize vehicle state and predictions directly inside the CARLA world.
 
 📁 spawn_kinematics_draw_withoutspec.py
