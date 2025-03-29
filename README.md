@@ -21,7 +21,8 @@ Using basic kinematic equations, it predicts future positions assuming constant 
 🧮 Kinematic Equations Used
 
 This project uses constant-velocity motion modeling:
-xf=x0+vx⋅tx_f
+
+xf=x0+vx⋅tx_f, 
 yf=y0+vy⋅ty_f 
 
 Where:
