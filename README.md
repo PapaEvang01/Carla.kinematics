@@ -72,9 +72,11 @@ These scripts extend the baseline kinematics version by integrating the CRAT-Pre
 CRAT-Pred models multi-agent interactions and predicts multiple possible futures (multi-modal), making it much more realistic for autonomous driving scenarios.
 
 📁 cratpred+carla_withspec.py
+
 This is the fully integrated, ego-focused version that combines CRAT-Pred prediction and CARLA visualization with a top-down dynamic spectator camera.
 
 📁 cratpred+carla_withoutspec.py
+
 This version offers the same powerful CRAT-Pred integration as above, but without spectator movement, allowing a full static view of the simulation map.
 
 
